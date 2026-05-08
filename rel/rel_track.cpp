@@ -1,4 +1,5 @@
 #include "rel_track.h"
+#include <netnode.hpp>
 #include <string>
 #include <sstream>
 #include <iomanip>
@@ -492,6 +493,19 @@ bool rel_track::apply_relocations(bool dry_run)
         }
       }
     } // for each import
+
+    for ( auto it = imports_map.begin(); it != imports_map.end(); ++it )
+    {
+      netnode modnode;
+      modnode.create();
+      for ( auto entry = it->second.begin(); entry != it->second.end(); ++entry )
+      {
+        qstring name;
+        if ( get_name(&name, entry->second) > 0 && !name.empty() )
+          set_import_name(modnode, entry->second, name.c_str());
+      }
+      import_module(it->first.c_str(), nullptr, modnode, nullptr, nullptr);
+    }
   }
   return true;
 }

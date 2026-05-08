@@ -53,6 +53,9 @@ void idaapi load_file(linput_t *fp, ushort neflag, const char * /*fileformatname
 
   set_compiler_id(COMP_GNU);
 
+  inf_set_app_bitness(32);
+  inf_set_be(true);
+
   rel_track track(fp);
   inf_set_start_ea(START);
   inf_set_start_ip(START);
