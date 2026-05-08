@@ -1,3 +1,16 @@
+## Wii/GC loader plugins for IDA Pro (Updated for IDA 9x)
+
+Tested with IDA Pro 9.3 SP2 (macOS). Build:
+```
+mkdir build && cd build
+cmake .. -DIDASDK=/path/to/ida-sdk/src
+cmake --build .
+```
+
+Copy the output `dol` and `rel` libraries to your IDA installation's `loaders/` directory.
+
+___
+
 # REL & DOL Loader plugins for IDA Pro
 
 The REL and DOL files are found in Nintendo Gamecube/Wii games. This repository is focused on loading the REL files.

@@ -15,6 +15,7 @@
 #include <auto.hpp>
 #include <diskio.hpp>
 #include <kernwin.hpp>
+#include <lines.hpp>
 #include <nalt.hpp>
 #include <typeinf.hpp>
 

@@ -120,8 +120,8 @@ void idaapi load_file(linput_t *fp, ushort /*neflag*/, const char * /*fileformat
   msg("---------------------------------------\n");
   
   // we need PowerPC support otherwise we cannot do much with DOLs
-  if ( ph.id != PLFM_PPC )
-    set_processor_type("PPC", setproc_level_t::SETPROC_LOADER);
+  if ( PH.id != PLFM_PPC )
+    set_processor_type("PPC", SETPROC_LOADER);
 
   set_compiler_id(COMP_GNU);
 
@@ -129,7 +129,8 @@ void idaapi load_file(linput_t *fp, ushort /*neflag*/, const char * /*fileformat
   if (read_header(fp, &dhdr)==0) qexit(1);
   
   // every journey has a beginning
-  inf.start_ea = inf.start_ip = dhdr.entrypoint;
+  inf_set_start_ea(dhdr.entrypoint);
+  inf_set_start_ip(dhdr.entrypoint);
 
   // map selector 1 to 0
   set_selector(1, 0);
@@ -191,10 +192,13 @@ void idaapi load_file(linput_t *fp, ushort /*neflag*/, const char * /*fileformat
  *
  */
 
-extern "C" loader_t LDSC = {
+loader_t LDSC =
+{
   IDP_INTERFACE_VERSION,
   0, /* no loader flags */
   accept_file,
   load_file,
-  NULL,
+  nullptr,
+  nullptr,
+  nullptr,
 };

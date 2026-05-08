@@ -81,7 +81,7 @@ private:
 
   std::map<std::string, rel_track> m_external_modules;
 
-  friend int idaapi enum_modules_cb(char const * file, rel_track * owner);
+  friend struct rel_file_enumerator;
 };
 
 #endif // #ifndef __REL_TRACK_H__

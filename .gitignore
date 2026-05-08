@@ -1,5 +1,7 @@
 Release
+build/
 *.swp
 *.suo
 *.user
 
+.DS_Store

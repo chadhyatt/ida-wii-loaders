@@ -17,18 +17,17 @@
 *
 */
 
-int idaapi accept_file(linput_t *fp, char fileformatname[MAX_FILE_FORMAT_NAME], int n)
+int idaapi accept_file(qstring *fileformatname, qstring *processor, linput_t *li, const char *filename)
 {
-  if (n) return(0);
-
-  rel_track test_valid(fp);
+  rel_track test_valid(li);
 
   // Check if valid
   if (!test_valid.is_good())
     return 0;
 
   // file has passed all sanity checks and might be a rel
-  qstrncpy(fileformatname, "Nintendo REL", MAX_FILE_FORMAT_NAME);
+  *fileformatname = "Nintendo REL";
+  *processor = "PPC";
   return(ACCEPT_FIRST | 0xD07);
 }
 
@@ -49,13 +48,14 @@ void idaapi load_file(linput_t *fp, ushort neflag, const char * /*fileformatname
   msg("---------------------------------------\n");
 
   // we need PowerPC support to do anything with rels
-  if (ph.id != PLFM_PPC)
-    set_processor_type("PPC", SETPROC_ALL | SETPROC_FATAL);
+  if (PH.id != PLFM_PPC)
+    set_processor_type("PPC", SETPROC_LOADER);
 
   set_compiler_id(COMP_GNU);
 
   rel_track track(fp);
-  inf.beginEA = START;
+  inf_set_start_ea(START);
+  inf_set_start_ip(START);
 
   // map selector 1 to 0
   set_selector(1, 0);
@@ -71,10 +71,13 @@ void idaapi load_file(linput_t *fp, ushort neflag, const char * /*fileformatname
 *
 */
 
-extern "C" loader_t LDSC = {
+loader_t LDSC =
+{
   IDP_INTERFACE_VERSION,
-  0, /* no loader flags */
+  0,
   accept_file,
   load_file,
-  NULL,
+  nullptr,
+  nullptr,
+  nullptr,
 };

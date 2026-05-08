@@ -2,7 +2,7 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
-#include <fstream>
+
 #include <utility>
 #include <algorithm>
 #include <set>
@@ -63,10 +63,10 @@ bool rel_track::read_header()
 
   m_import_offset = swap32(base_header.import_offset);
   m_import_size   = swap32(base_header.import_size);
-  
+
   m_bss_section_ign = base_header.bss_section;
   m_bss_size        = swap32(base_header.bss_size);
-  
+
   m_prolog_prep.m_offset     = swap32(base_header.prolog_offset);
   m_prolog_prep.m_section_id = base_header.prolog_section;
 
@@ -79,7 +79,7 @@ bool rel_track::read_header()
   // TODO: v2 check
   //m_base_header.align               = swap32(base_header.align);
   //m_base_header.bss_align           = swap32(base_header.bss_align);
-  
+
   // TODO: v3 check
   //m_base_header.fix_size            = swap32(base_header.fix_size);
 
@@ -285,7 +285,7 @@ bool rel_track::apply_relocations(bool dry_run)
           case R_DOLPHIN_NOP:
             break;
           case R_PPC_ADDR32:
-            patch_long( this->section_address(current_section, current_offset), this->section_address(rel.section, rel.addend) );
+            patch_dword( this->section_address(current_section, current_offset), this->section_address(rel.section, rel.addend) );
             break;
           case R_PPC_ADDR16_LO:
             patch_word(this->section_address(current_section, current_offset), this->section_address(rel.section, rel.addend) & 0xFFFF);
@@ -301,10 +301,10 @@ bool rel_track::apply_relocations(bool dry_run)
             where = this->section_address(current_section, current_offset);
             value = this->section_address(rel.section, rel.addend);
             value -= where;
-            orig = static_cast<uint32_t>(get_original_long(where));
+            orig = static_cast<uint32_t>(get_original_dword(where));
             orig &= 0xFC000003;
             orig |= value & 0x03FFFFFC;
-            patch_long(where, orig);
+            patch_dword(where, orig);
             break;
           default:
             msg("REL: RELOC TYPE %u UNSUPPORTED\n", rel.type);
@@ -362,17 +362,17 @@ bool rel_track::apply_relocations(bool dry_run)
         }
       }
     } // for each module
-    
+
     // Now create the import/externals section
     uint32_t imp_offset = m_next_seg_offset;
     m_segment_address_map[SECTION_IMPORTS] = imp_offset;
     //section_entry import_section = { m_next_section_offset, desired_import_size };
     m_next_seg_offset += desired_import_size;
-    
+
     if (!add_segm(1, imp_offset, imp_offset + desired_import_size, NAME_EXTERN, CLASS_EXTERN))
       return err_msg("Failed to create XTRN segment");
     set_segm_addressing(getseg(imp_offset), 1);
-    
+
     m_import_section = static_cast<uint8_t>(m_sections.size());
     //m_sections.emplace_back(import_section);
 
@@ -384,14 +384,14 @@ bool rel_track::apply_relocations(bool dry_run)
       ea_t target_module_start = imports_module_starts[it->first];
       if ( target_module_start == 0 )
         return err_msg("Failed to locate start of module imports.");
-      add_long_cmt( target_module_start, true, "\nImports from %s\n", it->first.c_str() );
+      add_extra_cmt( target_module_start, true, "\nImports from %s\n", it->first.c_str() );
 
       // Iterate relocation opcodes
       uint32_t current_offset = 0, current_section = 0;
       for ( auto e = it->second.begin(); e != it->second.end(); ++e )
       {
         ea_t targ_offset; // this must be initialized for anything that isn't DOLPHIN_SECTION or DOLPHIN_NOP
-        
+
         // If something is actually going to be done with the target
         if ( e->type != R_DOLPHIN_SECTION && e->type != R_DOLPHIN_NOP )
         {
@@ -416,21 +416,33 @@ bool rel_track::apply_relocations(bool dry_run)
               ss << "_s" << static_cast<unsigned>(e->section) << '_';
             ss << reinterpret_cast<void*>(e->addend);
             if ( described.insert(targ_offset).second )
-              describe(targ_offset, true, "addend: %08X; section: %u;", e->addend, static_cast<unsigned>(e->section));
+            {
+              qstring cmt;
+              cmt.sprnt("addend: %08X; section: %u;", e->addend, static_cast<unsigned>(e->section));
+              set_cmt(targ_offset, cmt.c_str(), true);
+            }
           }
           else if ( offs == 1 )
           {
             ss << "_s" << static_cast<unsigned>(e->section) << "_bss_" << reinterpret_cast<void*>(e->addend);
             if ( described.insert(targ_offset).second )
-              describe(targ_offset, true, "addend: %08X; section: %u (BSS);", e->addend, static_cast<unsigned>(e->section));
+            {
+              qstring cmt;
+              cmt.sprnt("addend: %08X; section: %u (BSS);", e->addend, static_cast<unsigned>(e->section));
+              set_cmt(targ_offset, cmt.c_str(), true);
+            }
           }
           else
           {
             ss << '_' << reinterpret_cast<void*>(offs);
             if ( described.insert(targ_offset).second )
-              describe(targ_offset, true, "addend: %08X; section: %u; virtual: 0x%08X;", e->addend, static_cast<unsigned>(e->section), offs);
+            {
+              qstring cmt;
+              cmt.sprnt("addend: %08X; section: %u; virtual: 0x%08X;", e->addend, static_cast<unsigned>(e->section), offs);
+              set_cmt(targ_offset, cmt.c_str(), true);
+            }
           }
-          do_name_anyway(targ_offset, ss.str().c_str());
+          force_name(targ_offset, ss.str().c_str());
         }
 
         current_offset += e->offset;
@@ -444,14 +456,14 @@ bool rel_track::apply_relocations(bool dry_run)
           break;
         case R_PPC_ADDR32:
         {
-          patch_long( this->section_address(current_section, current_offset), targ_offset );
-          put_long(targ_offset, e->addend);
+          patch_dword( this->section_address(current_section, current_offset), targ_offset );
+          put_dword(targ_offset, e->addend);
           break;
         }
         case R_PPC_ADDR16_LO:
         {
           patch_word(this->section_address(current_section, current_offset), targ_offset & 0xFFFF);
-          put_long(targ_offset, e->addend);
+          put_dword(targ_offset, e->addend);
           break;
         }
         case R_PPC_ADDR16_HA:
@@ -461,7 +473,7 @@ bool rel_track::apply_relocations(bool dry_run)
             value += 0x00010000;
 
           patch_word(this->section_address(current_section, current_offset), (value >> 16) & 0xFFFF);
-          put_long(targ_offset, e->addend);
+          put_dword(targ_offset, e->addend);
           break;
         }
         case R_PPC_REL24:
@@ -469,10 +481,10 @@ bool rel_track::apply_relocations(bool dry_run)
           ea_t where = this->section_address(current_section, current_offset);
           ea_t value = targ_offset;
           value -= where;
-          uint32_t orig = static_cast<uint32_t>(get_original_long(where));
+          uint32_t orig = static_cast<uint32_t>(get_original_dword(where));
           orig &= 0xFC000003;
           orig |= value & 0x03FFFFFC;
-          patch_long(where, orig);
+          patch_dword(where, orig);
           break;
         }
         default:
@@ -525,42 +537,48 @@ bool rel_track::apply_names(bool dry_run)
   return true;
 }
 
-int idaapi enum_modules_cb(char const * file, rel_track * owner)
+struct rel_file_enumerator : public file_enumerator_t
 {
-  // Load the file
-  linput_t * inp = open_linput(file, false);
-  rel_track rel(inp);
-
-  // If the file is good
-  if ( rel.is_good() )
+  rel_track *owner;
+  rel_file_enumerator(rel_track *o) : owner(o) {}
+  virtual int visit_file(const char *file) override
   {
-    std::string basename(qbasename(file));
-    std::string modulename = basename.substr(0, basename.find_last_of('.'));
+    // Load the file
+    linput_t *inp = open_linput(file, false);
+    rel_track rel(inp);
 
-    if ( rel.m_id == 0 )
-      msg("%s id is 0\n", modulename.c_str());
-    owner->m_module_names[rel.m_id] = modulename;
-    owner->m_external_modules[modulename] = rel;
+    // If the file is good
+    if ( rel.is_good() )
+    {
+      std::string basename(qbasename(file));
+      std::string modulename = basename.substr(0, basename.find_last_of('.'));
+
+      if ( rel.m_id == 0 )
+        msg("%s id is 0\n", modulename.c_str());
+      owner->m_module_names[rel.m_id] = modulename;
+      owner->m_external_modules[modulename] = rel;
+    }
+
+    // close/cleanup
+    close_linput(inp);
+    return 0;
   }
-
-  // close/cleanup
-  close_linput(inp);
-  return 0;
-}
+};
 
 void rel_track::init_resolvers()
 {
   std::string path;
-  
+
   // Retrieve the directory of the current database
   char dir[260] = {};
-  if ( !qdirname(dir, sizeof(dir), database_idb) )
+  if ( !qdirname(dir, sizeof(dir), get_path(PATH_TYPE_IDB)) )
     msg("REL: Unable to get directory of idb file.\n");
   path = dir;
 
   // Load the module names
   m_module_names.clear();
-  enumerate_files(nullptr, 0, path.c_str(), "*.rel", reinterpret_cast<int(idaapi*)(char const*,void*)>(&enum_modules_cb), this);
+  rel_file_enumerator fv(this);
+  enumerate_files(nullptr, 0, path.c_str(), "*.rel", fv);
 
 
   /*std::ifstream modid(path + "/module_id.txt");
@@ -594,7 +612,7 @@ uint32_t rel_track::get_external_offset(std::string const &modulename, uint32_t 
   uint32_t first_offset = 0;
   for ( unsigned i = 0; i < it->second.m_sections.size() && first_offset == 0; ++i )
     first_offset = SECTION_OFF(it->second.m_sections[i].file_offset);
-  
+
   if ( virt )
   {
     section_offset -= first_offset;
